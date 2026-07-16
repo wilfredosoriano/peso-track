@@ -9,7 +9,7 @@ export async function TopBar() {
   const notifications = await getNotifications();
 
   return (
-    <header className="flex items-center justify-between border-b bg-background px-4 py-3 md:px-6">
+    <header className="flex items-center justify-between border-b bg-background px-4 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-3 md:px-6 md:pt-3">
       <Suspense fallback={<div className="h-9 w-56" />}>
         <MonthSwitcher />
       </Suspense>
