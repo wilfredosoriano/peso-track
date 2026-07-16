@@ -30,7 +30,7 @@ export function BottomTabBar() {
   };
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 flex items-center border-t bg-background pb-[env(safe-area-inset-bottom)] md:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-40 flex items-center border-t bg-background pb-[max(1.25rem,env(safe-area-inset-bottom))] md:hidden">
       {renderTab(firstTab)}
       {renderTab(secondTab)}
       <Link
