@@ -1,0 +1,146 @@
+// PesoTrack database schema
+// See plan: /Users/wilfredo.soriano/.claude/plans/md-i-am-attaching-partitioned-rainbow.md
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum RecurrenceFrequency {
+  MONTHLY
+  EVERY_2_MONTHS
+  QUARTERLY
+  YEARLY
+}
+
+enum SplitType {
+  EQUAL
+  PERCENTAGE
+}
+
+model User {
+  id            String   @id @default(cuid())
+  clerkUserId   String   @unique
+  email         String   @unique
+  name          String?
+  payCutoffDay1 Int      @default(10)
+  payCutoffDay2 Int      @default(25)
+
+  notifyDueSoon   Boolean @default(true)
+  notifyOverdue   Boolean @default(true)
+  notifyDaysAhead Int     @default(3)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  categories        Category[]
+  monthPeriods      MonthPeriod[]
+  bills             Bill[]
+  pushSubscriptions PushSubscription[]
+}
+
+/** One row per subscribed browser/device — a user can have several (phone, laptop, etc). */
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  icon      String?
+  color     String?
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  bills Bill[]
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+model MonthPeriod {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  year       Int
+  month      Int
+  monthIndex Int
+  salary     Decimal? @db.Decimal(12, 2)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  bills Bill[]
+
+  @@unique([userId, year, month])
+  @@index([userId, monthIndex])
+}
+
+model Bill {
+  id         String      @id @default(cuid())
+  userId     String
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  monthId    String
+  month      MonthPeriod @relation(fields: [monthId], references: [id], onDelete: Cascade)
+  categoryId String?
+  category   Category?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  name       String
+  expression String
+  amount     Decimal  @db.Decimal(12, 2)
+  dueDate    DateTime @db.Date
+  isPaid     Boolean  @default(false)
+  notes      String?
+
+  isRecurring                Boolean               @default(false)
+  recurrenceFrequency        RecurrenceFrequency?
+  recurrenceAnchorMonthIndex Int?
+
+  // Last month this bill should recur — for loans/installments with a fixed
+  // term (e.g. a 24-month motorcycle loan), unlike an indefinite subscription.
+  // Copies forward unchanged (unlike isPaused, which never does).
+  recurrenceEndMonthIndex Int?
+
+  // "Pause this one cycle" for a recurring bill — excluded from totals/lists
+  // while true, but deliberately NOT copied forward (see copyRecurringBillsForward),
+  // so the very next occurrence resumes normally rather than staying paused.
+  isPaused Boolean @default(false)
+
+  // Dedup flags so the notification cron doesn't push the same reminder
+  // every time it runs — set once a push has been sent for that state.
+  dueSoonNotified Boolean @default(false)
+  overdueNotified Boolean @default(false)
+
+  splitEnabled       Boolean    @default(false)
+  splitType          SplitType?
+  splitCount         Int?
+  splitPercentage    Decimal?   @db.Decimal(5, 2)
+  splitPartnerLabel  String?
+  yourShare          Decimal    @db.Decimal(12, 2)
+
+  originBillId String?
+  originBill   Bill?   @relation("BillHistory", fields: [originBillId], references: [id], onDelete: SetNull)
+  copies       Bill[]  @relation("BillHistory")
+  rootBillId   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([monthId])
+  @@index([userId, dueDate])
+  @@index([categoryId])
+  @@index([rootBillId])
+}
